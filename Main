@@ -1,0 +1,81 @@
+#Registri utilizzati e la loro funzione:
+#	$s0, $s1, $s2 --> puntatori alla memoria, contengono gli indirizzi delle aree di memoria di nostro interesse.
+#
+#	$t0 --> Contiene il voto su cui fare le operazioni
+#	$t1 --> Contiene i crediti del voto, su cui vanno fatte le operazioni
+#	$t2 --> Contiene il risultato della moltiplicazione tra il voto e i suoi crediti
+#	$t3 --> Registro utilizzato come flag per sapere se abbiamo già calcolato la media totale
+#	
+#	$s3 --> Contiene la somma delle moltiplicazioni tra voto e crediti
+#	$s4 --> Contiene la somma dei crediti 
+#	$s5 --> Contiene il risultato della media attuale, non ancora la migliore
+#	$s7 --> Contiene il voto pieggiore in relazioni ai suoi crediti
+#	$s6 --> Contiene i crediti del voto peggiore
+#
+#	$f4 --> Contiene la somma delle moltiplicazioni tra voto e crediti in singola precisione
+#	$f5 --> Contiene la somma dei crediti in singola precisione
+#	$f6 --> Contiene la media attuale che non tiene conto di un voto
+#	$f7 --> Contiene la media migliore
+
+
+.data	
+	voti:	.byte	18 20 22 30	#Vettore di voti
+	media:	.space	4		#Spazio in meoria che conterrà il risultato della media, 32 bit perchè sarà in singola precisione
+	crediti:.byte	12 6 9 12	#Vettore di crediti
+	
+#I due vettori "voti" e "crediti" sono accomunati: il voto e il suo credito si trovano allo stesso indice.
+	
+.text
+
+carico:	la	$s0, voti	#$s0 = &voti[0]
+	la	$s1, crediti	#$s1 = &crediti[0]
+	la	$s2, media	#s2 = &media
+	
+	
+leggi:	beq	$s0, $s2, second	#Se siamo alla fine del vettore di voti vai a "".
+
+	lbu	$t0, 0($s0)	#$t0 = voti[i]
+	lbu	$t1, 0($s1)	#$t1 = crediti[j]
+	
+	addiu	$s0, $s0, 1	#i++
+	addiu	$s1, $s1, 1	#j++
+	
+	mulu	$t2, $t0, $t1	#$t2 = voti[i] * crediti[j]	
+	
+	beq	$t3, 1, sottrai	#Se abbiamo già calcolato la media completa saltiamo a "sottrai"
+	
+somma:	addu	$s3, $s3, $t2	#$s3 += moltiplicazione tra voto e crediti
+	addu	$s4, $s4, $t1	#$s4 += crediti[j]
+	
+	j leggi
+	
+calcol:	mtc1	$s3, $f4	#Sposta la somma delle moltiplicazioni in $f4
+	mtc1	$s4, $f5	#Sposta la somma dei crediti in $f5
+	cvt.s.w	$f4, $f4	#Converti la somma delle moltiplicazioni in singola precisione
+	cvt.s.w	$f5, $f5	#Converti la somma dei crediti in singola precisione
+	
+	div.s	$f6, $f4, $f5	#Calcola la media attuale senza il voto 
+	addu	$s3, $s3, $t2	#$s3 viene riportato al suo valore inziale
+	addu	$s4, $s4, $t1	#$s4 viene riportato al suo valore iniziale
+	c.lt.s  0,$f6, $f7	#Se la media attuale è minore della media migliore, imposta il flag 0 a "true"
+	bc1f	cambio		#Se la media attuale è maggiore della media migliore vai a "cambio"
+	c.lt.s	0, $f6, $f6	#Resetta il flag 0
+	j leggi			
+
+second:	beq	$t3, 1, fine	#Se abbiamo già fatto il secondo giro andiamo a terminare il programma.
+	addiu	$t3, $0, 1	#Utilizziamo $t3 come registro flag che cindica se abbiamo terminato il calcolo completo della memoria.
+	j	carico
+		
+sottrai:subu	$s3, $s3, $t2	#Tolgo dalla somma delle moltiplicazioni la moltiplicazione del voto.
+	subu	$s4, $s4, $t1	#Tolgo dalla somma dei crediti i crediti del voto esaminato.
+	j	calcol
+	
+cambio:	mov.s	$f7, $f6	#Metti il valore nella media attuale nel registro che tiene conto della media migliore	
+	move	$s7, $t0	#Tiene traccia del voto peggiore in relazione ai crediti
+	move	$s6, $t1	#Tiene traccia dei crediti del voto peggiore
+	j leggi
+	
+fine:	swc1	$f7, 0($s2)	#Carico il risultato in meoria nel suo spazio apposito
+
+li $v0 10
+syscall
